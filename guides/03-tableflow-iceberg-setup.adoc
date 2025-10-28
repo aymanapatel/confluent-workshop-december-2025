@@ -267,6 +267,11 @@ confluent tableflow api-key list
 - Check organization UUID and environment ID in endpoint URL
 - Ensure catalog integration is active and healthy
 
+**Failed OAuth token refresh after DuckDB session is idle for 30+ minutes**::
+- Manifests as error `HTTP Error: Unauthorized request to endpoint ... returned an error response (HTTP 401). Reason: Unauthorized`
+- Restart DuckDB
+- Rerun the `CREATE SECRET` and `ATTACH 'warehouse'` statements
+
 **Secret creation fails**::
 [source,sql]
 ----

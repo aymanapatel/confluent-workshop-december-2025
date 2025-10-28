@@ -65,11 +65,11 @@ code --list-extensions | grep confluent
 # Check CLI installation and version
 confluent version
 
-# Expected output should show version 3.x or higher
+# Expected output should show version 4.x or higher
 # confluent - Confluent CLI
-# Version:     v3.x.x
+# Version:     v4.x.x
 # Git Ref:     xxxxxxx
-# Build Date:  2024-xx-xx
+# Build Date:  2025-xx-xx
 ----
 
 If not installed, run:
@@ -99,9 +99,6 @@ If not installed, visit: https://duckdb.org/docs/installation/
 ----
 # Login to Confluent Cloud
 confluent login --save
-
-# This will open your browser for authentication
-# Complete the login process in your browser
 ----
 
 === Create or Select Organization

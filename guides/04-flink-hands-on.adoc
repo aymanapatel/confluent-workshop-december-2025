@@ -238,11 +238,20 @@ FROM TABLE(
 GROUP BY coin_id, w.window_start, w.window_end;
 ----
 
-=== Create Derived Streams for Trends
+=== Create Derived Stream for Historical Trends
 
 [source,sql]
 ----
 include::../scripts/flink/crypto-trends.flink.sql[]
+----
+
+=== Create Derived Stream for Price Predictions
+
+Let's create a derived table containing predicted prices and detected anomalies. These predictions are made via Confluent Cloud's built-in https://docs.confluent.io/cloud/current/ai/builtin-functions/forecast.html[forecasting] and https://docs.confluent.io/cloud/current/ai/builtin-functions/forecast.html[anomaly detection] ARIMA-based functions.
+
+[source,sql]
+----
+include::../scripts/flink/crypto-predictions.flink.sql[]
 ----
 
 == 🗄️ Tableflow Integration (10 minutes)
@@ -271,10 +280,19 @@ confluent tableflow topic enable crypto-trends \
   --table-formats ICEBERG \
   --retention-ms 604800000
 
+# Enable Tableflow for the crypto-predictions topic created by Flink. The use case
+# for exporting data for analytics is to analyze predictive accuracy of the models.
+confluent tableflow topic enable crypto-predictions \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+
 # Monitor materialization progress
 confluent tableflow topic list --cluster $CC_KAFKA_CLUSTER
 confluent tableflow topic describe price-alerts --cluster $CC_KAFKA_CLUSTER
 confluent tableflow topic describe crypto-trends --cluster $CC_KAFKA_CLUSTER
+confluent tableflow topic describe crypto-predictions --cluster $CC_KAFKA_CLUSTER
 ----
 
 === Verify Flink Table Materialization
@@ -287,6 +305,7 @@ confluent tableflow topic list --cluster $CC_KAFKA_CLUSTER
 # Verify schemas match Flink output
 confluent tableflow topic describe price-alerts --cluster $CC_KAFKA_CLUSTER -o json
 confluent tableflow topic describe crypto-trends --cluster $CC_KAFKA_CLUSTER -o json
+confluent tableflow topic describe crypto-predictions --cluster $CC_KAFKA_CLUSTER -o json
 
 # Wait for data to flow (2-3 minutes)
 confluent tableflow topic describe price-alerts --cluster $CC_KAFKA_CLUSTER -o json
@@ -317,6 +336,35 @@ FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."price-alerts"
 WHERE alert_time >= NOW() - INTERVAL 2 HOURS
 GROUP BY cryptocurrency, alert_type
 ORDER BY alert_count DESC;
+
+-- Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
+SELECT
+  price_direction_indicator,
+  COUNT(*) AS count
+FROM (
+  SELECT
+    usd - lag(usd) OVER w AS actual_change,
+    usd - lag(predicted_usd) OVER w AS predicted_change,
+    CASE
+      WHEN SIGN(actual_change) == SIGN (predicted_change) THEN '⭐'
+      ELSE '❌'
+    END AS price_direction_indicator
+  FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions"
+  WINDOW w AS (
+      PARTITION BY coin_id
+      ORDER BY event_time ASC
+      ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+  )
+)
+GROUP BY price_direction_indicator;
+
+-- Compare anomalous prices to non-anomalous prices to judge model efficacy
+SELECT
+  usd,
+  previous_price,
+  pct_diff,
+  is_anomaly
+FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions";
 ----
 
 === Monitor Application Status and Metrics

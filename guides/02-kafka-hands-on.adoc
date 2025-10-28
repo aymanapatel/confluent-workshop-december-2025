@@ -63,12 +63,6 @@ confluent kafka topic create crypto-prices \
   --config retention.ms=604800000 \
   --config cleanup.policy=delete
 
-# Create topic for price alerts (smaller retention)
-confluent kafka topic create price-alerts \
-  --partitions 1 \
-  --config retention.ms=86400000 \
-  --config cleanup.policy=delete
-
 # Create compacted topic for latest prices
 confluent kafka topic create latest-prices \
   --partitions 3 \

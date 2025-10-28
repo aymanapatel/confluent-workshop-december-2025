@@ -92,6 +92,7 @@ source .env
 confluent tableflow topic disable crypto-prices --force --cluster $CC_KAFKA_CLUSTER
 confluent tableflow topic disable price-alerts --force --cluster $CC_KAFKA_CLUSTER
 confluent tableflow topic disable crypto-trends --force --cluster $CC_KAFKA_CLUSTER
+confluent tableflow topic disable crypto-predictions --force --cluster $CC_KAFKA_CLUSTER
 confluent tableflow topic disable crypto-prices-exploded --force --cluster $CC_KAFKA_CLUSTER
 
 # 2. List and verify Tableflow topics are disabled
@@ -172,6 +173,7 @@ confluent kafka topic delete crypto-prices --cluster $CC_KAFKA_CLUSTER
 confluent kafka topic delete price-alerts --cluster $CC_KAFKA_CLUSTER
 confluent kafka topic delete crypto-prices-exploded --cluster $CC_KAFKA_CLUSTER
 confluent kafka topic delete crypto-trends --cluster $CC_KAFKA_CLUSTER
+confluent kafka topic delete crypto-predictions --cluster $CC_KAFKA_CLUSTER
 confluent kafka topic delete latest-prices --cluster $CC_KAFKA_CLUSTER
 
 # Verify deletion
