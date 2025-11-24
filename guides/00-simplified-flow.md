@@ -2,7 +2,7 @@
 ## Step 1 - Set up playground
 Clone the repository
 
-``
+```
 workshop-validate
 ```
 
