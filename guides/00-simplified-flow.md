@@ -151,6 +151,37 @@ confluent kafka topic configuration list crypto-prices
 ```./deploy-connector.sh```
 
 
+## 3 Configure access via Iceberg tables and connect DuckDB for analytics
+
+### 3.1 Enable tableflow
+```
+confluent tableflow topic enable crypto-prices \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+```
+
+### 3.2
+
+```
+print $TABLEFLOW_API_KEY
+```
+```
+print $TABLEFLOW_API_SECRET
+```
+
+```sql
+CREATE SECRET iceberg_secret (
+    TYPE ICEBERG,
+    CLIENT_ID 'your-tableflow-api-key',
+    CLIENT_SECRET 'your-tableflow-api-secret',
+    ENDPOINT 'https://tableflow.us-east-1.aws.confluent.cloud/iceberg/catalog/organizations/your-org-id/environments/your-env-id',
+    OAUTH2_SCOPE 'catalog'
+);
+```
+
+```duckdb --ui workshop_analytics.db```
 
 
 
