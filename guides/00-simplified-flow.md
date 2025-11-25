@@ -46,6 +46,27 @@ export CC_KAFKA_CLUSTER=
 confluent kafka cluster use $CC_KAFKA_CLUSTER
 ```
 
-### 1.6 Create and use a new cluster
+### 1.6 Create API keys 
+
+For the cluster
+
+For the schema registry
+
+For Tableflow
+
+## 2 Bring the data in!
+
+### 2.1 Create Kafka topic
+
+### 2.2 
+
+
+
+
+
+
+
+
+
 
 
