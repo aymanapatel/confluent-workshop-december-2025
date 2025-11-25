@@ -165,10 +165,23 @@ confluent tableflow topic enable crypto-prices \
 ### 3.2
 
 ```
-print $TABLEFLOW_API_KEY
+cat <<EOF
+SET CC_KAFKA_CLUSTER = $CC_KAFKA_CLUSTER
+SET TABLEFLOW_API_KEY = $TABLEFLOW_API_KEY
+SET TABLEFLOW_API_SECRET = $TABLEFLOW_API_SECRET
+EOF
 ```
+
+
+
+todo - add image
+
+
+
 ```
-print $TABLEFLOW_API_SECRET
+SET CC_KAFKA_CLUSTER =
+SET TABLEFLOW_API_KEY =
+SET TABLEFLOW_API_SECRET =
 ```
 
 ```sql
@@ -181,12 +194,21 @@ CREATE SECRET iceberg_secret (
 );
 ```
 
+```sql
+ATTACH 'warehouse' AS iceberg_catalog (
+    TYPE iceberg,
+    SECRET iceberg_secret,
+    ENDPOINT 'https://tableflow.us-east-1.aws.confluent.cloud/iceberg/catalog/organizations/your-org-id/environments/your-env-id'
+);
+```
+
+
 ```duckdb --ui workshop_analytics.db```
 
 
 
 
-
+```SHOW DATABASES;```
 
 
 
