@@ -21,9 +21,10 @@ workshop-login
 
 ### 1.4 Create and use a separate environment
 
-```
+[source,bash]
+----
 confluent environment create "cc-workshop-env"
-```
+----
 ```
 export CC_ENV_ID=
 ```
@@ -31,20 +32,31 @@ export CC_ENV_ID=
 
 ### 1.5 Create and use a new cluster
 
-```
+[source,bash]
+----
 confluent kafka cluster create workshop-cluster \
   --cloud aws \
   --region us-east-1 \
   --type basic
-```
+----
 
-```
+[source,bash]
+----
 export CC_KAFKA_CLUSTER=
-```
+----
 
-```
+[source,bash]
+----
 confluent kafka cluster use $CC_KAFKA_CLUSTER
-```
+----
+
+# Describe cluster to verify settings
+
+[source,bash]
+----
+confluent kafka cluster describe $CC_KAFKA_CLUSTER
+----
+
 
 ### 1.6 Create API keys 
 
