@@ -30,6 +30,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "confluentinc.vscode-confluent",
         "asciidoctor.asciidoctor-vscode",
         "ms-python.python",
         "ms-python.flake8",
