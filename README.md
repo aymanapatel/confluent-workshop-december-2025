@@ -45,10 +45,11 @@ workshop-login
 ```
 confluent environment create "cc-workshop-env"
 ```
-We'll need the environment id for later. For convenience export it:
+We'll need the environment id for later. For convenience export it to ``CC_ENV_ID``:
 ```
 export CC_ENV_ID=
 ```
+Run the command below to use
 ```
 confluent environment use $CC_ENV_ID
 ```
