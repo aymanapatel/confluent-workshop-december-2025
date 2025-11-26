@@ -1,10 +1,10 @@
 # Hands-On with Confluent Cloud: Apache Kafka®, Apache Flink®, and Tableflow
 
-This is simplified flow. For more information check detailed guides.
+This is simplified flow. For more information check detailed [guides](./guides).
 
-## Step 1 - Set up playground
+## Step 1 Set up playground
 
-### 1.1 Onen the repository in GutHub Codespace
+### 1.1 Open the repository in GitHub Codespace
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](
 https://github.com/codespaces/new/anelook/cc-workshop-cryptocurrency-analytics-pipeline)
