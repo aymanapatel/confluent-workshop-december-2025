@@ -133,8 +133,9 @@ Script [deploy-connector](scripts/kafka/deploy-connector.sh) deploys HttpSource 
 ( cd scripts/kafka && ./deploy-connector.sh )
 ```
 
-## Step 3. 
+## Step 3. Process streaming data with Apache Flink
 
+Create a compute pool
 ```
 confluent flink compute-pool create workshop-pool \
   --cloud aws \
@@ -142,18 +143,22 @@ confluent flink compute-pool create workshop-pool \
   --max-cfu 5 \
   --environment $CC_ENV_ID
 ```
-
-```export FLINK_POOL_ID=```
-```confluent flink compute-pool use $FLINK_POOL_ID```
+Export the id
+```
+export FLINK_POOL_ID=
+```
+And set to use this compute pool
+```
+confluent flink compute-pool use $FLINK_POOL_ID
+```
 
 ## 3.2
-
+Enter the shell to run SQL queries:
 ```
 confluent flink shell --compute-pool $FLINK_POOL_ID
 ```
 
-Create exploded table with individual records for each cryptocurrency
-Note: This creates a table with proper time attributes for windowing operations
+Create exploded table with individual records for each cryptocurrency. This sets proper time attributes for windowing operations
 
 ```sql
 CREATE TABLE `crypto-prices-exploded` (
@@ -194,11 +199,12 @@ FROM (
 WHERE usd IS NOT NULL AND usd > 0;
 ```
 
+Check the latest 10 records
 ```sql
 SELECT * FROM `crypto-prices-exploded` LIMIT 10;
 ```
 
-Count records per cryptocurrency
+You can also count records per cryptocurrency
 ```sql
 SELECT 
     coin_id,
@@ -210,62 +216,6 @@ FROM `crypto-prices-exploded`
 GROUP BY coin_id;
 ```
 
-Other optional things you can try:
-
-```
--- Filter for significant price changes using exploded data
-SELECT 
-  coin_id,
-  usd as price,
-  usd_24h_change as change_pct,
-  usd_market_cap as market_cap,
-  event_time
-FROM `crypto-prices-exploded`
-WHERE ABS(usd_24h_change) > 3.0;
-
--- Compare current prices across cryptocurrencies
-SELECT 
-  coin_id,
-  usd as current_price,
-  usd_24h_change as daily_change,
-  CASE 
-    WHEN usd_24h_change > 0 THEN '📈 UP'
-    WHEN usd_24h_change < 0 THEN '📉 DOWN'
-    ELSE '➡️ FLAT'
-  END as trend_indicator
-FROM `crypto-prices-exploded`
-WHERE event_time >= CURRENT_TIMESTAMP - INTERVAL '5' MINUTES;
-
--- Calculate 5-minute moving averages using exploded data
-SELECT 
-  coin_id as cryptocurrency,
-  window_start,
-  window_end,
-  AVG(usd) as avg_price,
-  MIN(usd) as min_price,
-  MAX(usd) as max_price,
-  AVG(usd_market_cap) as avg_market_cap,
-  AVG(usd_24h_vol) as avg_volume,
-  COUNT(*) as price_updates
-FROM TABLE(
-  TUMBLE(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '5' MINUTES)
-)
-GROUP BY coin_id, window_start, window_end;
-
--- Price volatility calculation using sliding windows with TVF syntax
-SELECT 
-  coin_id as cryptocurrency,
-  w.window_start,
-  w.window_end,
-  AVG(usd) as avg_price,
-  STDDEV(usd) as price_volatility,
-  (MAX(usd) - MIN(usd)) / AVG(usd) * 100 as price_range_pct,
-  AVG(ABS(usd_24h_change)) as avg_daily_volatility
-FROM TABLE(
-  HOP(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '1' MINUTES, INTERVAL '5' MINUTES)
-) AS w
-GROUP BY coin_id, w.window_start, w.window_end;
-```
 
 ## 3.3 Price alerts
 
