@@ -108,9 +108,7 @@ We'll stream cryptocurrency data from [coingecko](https://www.coingecko.com/) in
 
 ### 2.1 Create Kafka topic
 
-
 Create topic for cryptocurrency prices
-
 ```
 confluent kafka topic create crypto-prices \
   --partitions 3 \
@@ -118,31 +116,22 @@ confluent kafka topic create crypto-prices \
   --config cleanup.policy=delete
 ```
 
-Create compacted topic for latest prices
-
+You can list all topics
 ```
-confluent kafka topic create latest-prices \
-  --partitions 3 \
-  --config cleanup.policy=compact \
-  --config min.cleanable.dirty.ratio=0.01
-```
-
-```
-# List all topics
 confluent kafka topic list
-
-# Describe the crypto-prices topic
+```
+Get additional information and topic configuration
+```
 confluent kafka topic describe crypto-prices
-
-# List topic configurations
 confluent kafka topic configuration list crypto-prices
 ```
 
 ### 2.2 Deploy connector
 
-```cd scripts/kafka ```
-```./deploy-connector.sh```
-
+Script [deploy-connector](scripts/kafka/deploy-connector.sh) deploys HttpSource connectors that brings the data from coingecko's API endpoint
+```
+( cd scripts/kafka && ./deploy-connector.sh )
+```
 
 ## Step 3. 
 
