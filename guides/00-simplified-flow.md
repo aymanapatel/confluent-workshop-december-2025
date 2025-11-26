@@ -46,7 +46,7 @@ export CC_KAFKA_CLUSTER=
 confluent kafka cluster use $CC_KAFKA_CLUSTER
 ```
 
-# Describe cluster to verify settings
+Describe cluster to verify settings
 
 ```
 confluent kafka cluster describe $CC_KAFKA_CLUSTER
@@ -361,9 +361,9 @@ confluent tableflow topic enable crypto-trends \
 
 ```
 
-## 3 Configure access via Iceberg tables and connect DuckDB for analytics
+## 4 Configure access via Iceberg tables and connect DuckDB for analytics
 
-### 3.1 Enable tableflow
+### 4.1 Enable tableflow
 ```
 confluent tableflow topic enable crypto-prices \
   --cluster $CC_KAFKA_CLUSTER \
@@ -372,7 +372,7 @@ confluent tableflow topic enable crypto-prices \
   --retention-ms 604800000
 ```
 
-### 3.2
+### 4.2
 
 ```
 cat <<EOF
