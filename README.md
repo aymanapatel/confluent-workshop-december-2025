@@ -1,8 +1,21 @@
 # Hands-On with Confluent Cloud: Apache Kafka®, Apache Flink®, and Tableflow
 
-This is simplified flow. For more information check detailed [guides](./guides).
+Confluent Cloud is a fully managed platform for Apache Kafka, designed to simplify real-time data streaming and processing. It integrates Kafka for data ingestion, Flink for stream processing, and Tableflow for converting streaming data into analytics-ready Apache Iceberg tables. DuckDB, a lightweight analytical database, supports querying these Iceberg tables, making it an ideal tool for the workshop’s analytics component. The workshop is designed for developers with basic programming knowledge, potentially new to Kafka, Flink, or Tableflow, and aims to provide hands-on experience within a condensed time frame.
 
-## Step 1 Set up playground
+🚨 CRITICAL - COST PREVENTION: After completing this workshop, immediately follow the teardown guide to prevent unexpected charges from Flink compute pools and Tableflow catalog integrations.
+
+### What you'll learn
+- Set up a Kafka cluster and manage topics in Confluent Cloud.
+- Write and run a Flink job to process streaming data.
+- Use Tableflow to materialize Kafka topics as Iceberg tables and query them with DuckDB.
+
+### Prerequisites
+GitHub Account: Required for accessing GitHub Codespaces or cloning the workshop repository.
+[Create a free GitHub account](https://github.com/join) if you don’t have one.
+
+This is simplified flow. For more information and extra activities check detailed [guides](./guides). The flow below skips and simplifies some sections.
+
+## Step 1. Set up playground
 
 ### 1.1 Open the repository in GitHub Codespace
 
@@ -22,23 +35,29 @@ workshop-validate
 Register for Confluent Cloud and get free credits by going to [cnfl.io/workshop-cloud](cnfl.io/workshop-cloud).
 Once registered, go to Billing and Payment and set the code ``CONFLUENTDEV1``.
 
-### 1.3 Authenticate CLI
-
+### 1.3 Authenticate Confluent CLI
+Use your email and password to authenticate [Confluent CLI](https://docs.confluent.io/confluent-cli/current/install.html)
 ```
 workshop-login
 ```
 
-### 1.4 Create and use a separate environment
-
+### 1.4 Create an environment
 ```
 confluent environment create "cc-workshop-env"
 ```
+We'll need the environment id for later. For convenience export it:
 ```
 export CC_ENV_ID=
 ```
-``` confluent environment use $CC_ENV_ID```
+```
+confluent environment use $CC_ENV_ID
+```
+You can also check at any time the list of your enviroments with
+```
+confluent environment list
+```
 
-### 1.5 Create and use a new cluster
+### 1.5 Create an Apache Kafka cluster
 
 ```
 confluent kafka cluster create workshop-cluster \
@@ -120,7 +139,7 @@ export TABLEFLOW_API_SECRET=
 confluent tableflow topic list
 ```
 
-## 2 Bring the data in!
+## Setp 2. Bring the data in!
 
 ### 2.1 Create Kafka topic
 
@@ -160,7 +179,7 @@ confluent kafka topic configuration list crypto-prices
 ```./deploy-connector.sh```
 
 
-## 3. 
+## Step 3. 
 
 ```
 confluent flink compute-pool create workshop-pool \
@@ -370,7 +389,7 @@ confluent tableflow topic enable crypto-trends \
 
 ```
 
-## 4 Configure access via Iceberg tables and connect DuckDB for analytics
+## Setp 4. Configure access via Iceberg tables and connect DuckDB for analytics
 
 ### 4.1 Enable tableflow
 ```
