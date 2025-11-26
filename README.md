@@ -69,64 +69,42 @@ You can get additional details of the cluster by running
 confluent kafka cluster describe $CC_KAFKA_CLUSTER
 ```
 
-
 ### 1.6 Create API keys 
-We'll need API keys 
-For the cluster
+We'll need API keys for the cluster itself and for Tableflow.
+
 ```
 confluent api-key create --resource $CC_KAFKA_CLUSTER --description "Workshop API Key for Kafka Cluster"
 ```
-
+The command outpust the key and the secret, keep them for later.
 ```
-# export KAFKA_API_KEY=
-# export KAFKA_API_SECRET=
+export KAFKA_API_KEY=
 ```
-
+```
+export KAFKA_API_SECRET=
+```
+Set to use these keys for the cluster.
 ```
 confluent api-key use $KAFKA_API_KEY --resource $CC_KAFKA_CLUSTER
 ```
 
-For the schema registry
-
-```
-confluent schema-registry cluster describe
-```
-
-```
-export SCHEMA_REGISTRY_CLUSTER_ID=
-```
-
-```
-confluent api-key create --resource $SCHEMA_REGISTRY_CLUSTER_ID --description "Workshop API Key for Schema Registry"
-```
-
-```
-export SCHEMA_REGISTRY_API_KEY=
-```
-
-```
-export SCHEMA_REGISTRY_API_SECRET=
-```
-For Tableflow
+Now, let's do same steps for Tableflow
 
 ```
 confluent api-key create --resource tableflow --description "Workshop API Key for Tableflow"
 ```
-
 ```
 export TABLEFLOW_API_KEY=
 ```
-
 ```
 export TABLEFLOW_API_SECRET=
 ```
-
+You can test Tableflow access by listing topics (should be empty initially)
 ```
-# Test Tableflow access by listing topics (should be empty initially)
 confluent tableflow topic list
 ```
 
 ## Setp 2. Bring the data in!
+We'll stream cryptocurrency data from [coingecko](https://www.coingecko.com/) into an Apache Kafka topic.
 
 ### 2.1 Create Kafka topic
 
