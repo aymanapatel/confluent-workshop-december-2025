@@ -1,17 +1,26 @@
+# Hands-On with Confluent Cloud: Apache Kafka®, Apache Flink®, and Tableflow
+
+This is simplified flow. For more information check detailed guides.
+
 ## Step 1 - Set up playground
 
+### 1.1 Onen the repository in GutHub Codespace
 
-### 1.1 Clone the repository
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](
+https://github.com/codespaces/new/anelook/cc-workshop-cryptocurrency-analytics-pipeline)
 
+Alternatively, select the `<> Code` button, go to `Codespaces` and click to `Create codespace on main`. 
+
+The environment will install all necessary dependencies and tools. This will take around 10 minutes.
+
+Once the environment is ready, validate that everything is set up by running
 ```
 workshop-validate
 ```
 
 ### 1.2 Get free trial for Confluent Cloud 
-
-Got to cnfl.io/workshop-cloud
-Use CONFLUENTDEV1
-
+Register for Confluent Cloud and get free credits by going to [cnfl.io/workshop-cloud](cnfl.io/workshop-cloud).
+Once registered, go to Billing and Payment and set the code ``CONFLUENTDEV1``.
 
 ### 1.3 Authenticate CLI
 
