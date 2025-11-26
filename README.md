@@ -41,51 +41,37 @@ Use your email and password to authenticate [Confluent CLI](https://docs.conflue
 workshop-login
 ```
 
-### 1.4 Create an environment
-```
-confluent environment create "cc-workshop-env"
-```
-We'll need the environment id for later. For convenience export it to ``CC_ENV_ID``:
-```
-export CC_ENV_ID=
-```
-Run the command below to use
-```
-confluent environment use $CC_ENV_ID
-```
-You can also check at any time the list of your enviroments with
-```
-confluent environment list
-```
+### 1.4 Create an Apache Kafka cluster
 
-### 1.5 Create an Apache Kafka cluster
-
+Create a new basic cluster:
 ```
 confluent kafka cluster create workshop-cluster \
   --cloud aws \
   --region us-east-1 \
   --type basic
 ```
-
+The output will give you additional information, including the id of the cluster. We'll need this id for later. For convenience export it to ``CC_KAFKA_CLUSTER``:
 ```
 export CC_KAFKA_CLUSTER=
 ```
-
+Set the cluster as the default one:
 ```
 confluent kafka cluster use $CC_KAFKA_CLUSTER
 ```
 
-Describe cluster to verify settings
+You can also check at any time the list of your enviroments with
+```
+confluent kafka cluster list
+```
 
+You can get additional details of the cluster by running
 ```
 confluent kafka cluster describe $CC_KAFKA_CLUSTER
 ```
 
 
 ### 1.6 Create API keys 
-
-
-
+We'll need API keys 
 For the cluster
 ```
 confluent api-key create --resource $CC_KAFKA_CLUSTER --description "Workshop API Key for Kafka Cluster"
