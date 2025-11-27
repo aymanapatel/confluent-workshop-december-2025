@@ -140,8 +140,7 @@ Create a compute pool
 confluent flink compute-pool create workshop-pool \
   --cloud aws \
   --region us-east-1 \
-  --max-cfu 5 \
-  --environment $CC_ENV_ID
+  --max-cfu 5 
 ```
 Export the id
 ```
