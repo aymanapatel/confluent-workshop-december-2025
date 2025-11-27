@@ -288,6 +288,10 @@ SET TABLEFLOW_API_KEY =
 SET TABLEFLOW_API_SECRET =
 ```
 
+
+duckdb --ui workshop_analytics.db
+Give me an empty notebook
+
 ```sql
 CREATE SECRET iceberg_secret (
     TYPE ICEBERG,
@@ -310,9 +314,39 @@ ATTACH 'warehouse' AS iceberg_catalog (
 ```duckdb --ui workshop_analytics.db```
 
 
-
-
 ```SHOW DATABASES;```
 
+Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
+```
+SELECT
+  price_direction_indicator,
+  COUNT(*) AS count
+FROM (
+  SELECT
+    usd - lag(usd) OVER w AS actual_change,
+    usd - lag(predicted_usd) OVER w AS predicted_change,
+    CASE
+      WHEN SIGN(actual_change) == SIGN (predicted_change) THEN '⭐'
+      ELSE '❌'
+    END AS price_direction_indicator
+  FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions"
+  WINDOW w AS (
+      PARTITION BY coin_id
+      ORDER BY event_time ASC
+      ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+  )
+)
+GROUP BY price_direction_indicator;
+```
+
+Compare anomalous prices to non-anomalous prices to judge model efficacy
+```
+SELECT
+  usd,
+  previous_price,
+  pct_diff,
+  is_anomaly
+FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions";
+```
 
 
