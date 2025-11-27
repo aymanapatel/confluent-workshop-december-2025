@@ -54,7 +54,7 @@ The output will give you additional information, including the id of the cluster
 ```
 export CC_KAFKA_CLUSTER=
 ```
-Set the cluster as the default one:
+Set the cluster as the active one:
 ```
 confluent kafka cluster use $CC_KAFKA_CLUSTER
 ```
