@@ -216,32 +216,7 @@ GROUP BY coin_id;
 ```
 
 
-## 3.3 Price alerts
-
-```sql
--- Create price alerts using exploded cryptocurrency data
-
--- insert into `price-alerts`
-CREATE TABLE `price-alerts` AS (
-SELECT 
-  coin_id AS cryptocurrency,
-  usd AS current_price,
-  usd_24h_change AS price_change,
-  CASE 
-    WHEN usd_24h_change > 5 THEN 'STRONG_BULLISH'
-    WHEN usd_24h_change > 5 THEN 'BULLISH'
-    WHEN usd_24h_change < -5 THEN 'STRONG_BEARISH'
-    WHEN usd_24h_change < -3 THEN 'BEARISH'
-    ELSE 'NEUTRAL'
-  END AS alert_type,
-  event_time AS alert_time
-FROM `crypto-prices-exploded`
-WHERE ABS(usd_24h_change) > 3.0
-);
-
-```
-
-## 3.4 Create Derived Stream for Price Predictions
+## 3.3 Create Derived Stream for Price Predictions
 ```sql
 CREATE TABLE `crypto-predictions` AS
 SELECT
@@ -275,28 +250,16 @@ WHERE forecast[1][2] IS NOT NULL AND anomaly_results[6] IS NOT NULL;
 
 ```
 
-```
-confluent tableflow topic enable price-alerts \
-  --cluster $CC_KAFKA_CLUSTER \
-  --storage-type MANAGED \
-  --table-formats ICEBERG \
-  --retention-ms 604800000
-```
 
-```
-confluent tableflow topic enable crypto-trends \
-  --cluster $CC_KAFKA_CLUSTER \
-  --storage-type MANAGED \
-  --table-formats ICEBERG \
-  --retention-ms 604800000
 
-```
 
 ## Setp 4. Configure access via Iceberg tables and connect DuckDB for analytics
 
 ### 4.1 Enable tableflow
 ```
-confluent tableflow topic enable crypto-prices \
+# Enable Tableflow for the crypto-predictions topic created by Flink. The use case
+# for exporting data for analytics is to analyze predictive accuracy of the models.
+confluent tableflow topic enable crypto-predictions \
   --cluster $CC_KAFKA_CLUSTER \
   --storage-type MANAGED \
   --table-formats ICEBERG \
