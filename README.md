@@ -252,7 +252,7 @@ WHERE forecast[1][2] IS NOT NULL AND anomaly_results[6] IS NOT NULL;
 
 ## 3.4 Create a trend analysis over 10-minute windows
 
-```
+```sql
 CREATE TABLE `crypto-trends` AS
 SELECT 
   coin_id as cryptocurrency,
@@ -283,7 +283,7 @@ FROM (
 
 ## 3.5  Create a derived table for price alert signals
 
-```
+```sql
 CREATE TABLE `price-alerts` AS (
 SELECT 
   coin_id AS cryptocurrency,
@@ -373,20 +373,20 @@ ATTACH 'warehouse' AS iceberg_catalog (
 
 Test that connection works by requesting the list of databases.
 
-```
+```sql
 SHOW DATABASES;
 ```
 
 ### 4.3 Price alerts
 Query price alerts created by Flink
-```
+```sql
 SELECT * FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."price-alerts"
 ORDER BY alert_time DESC
 LIMIT 10;
 ```
 
 Analyze alert patterns
-```
+```sql
 SELECT
     cryptocurrency,
     alert_type,
@@ -402,7 +402,7 @@ ORDER BY alert_count DESC;
 
 ### 4.4  Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
 
-```
+```sql
 SELECT
   price_direction_indicator,
   COUNT(*) AS count
@@ -425,7 +425,7 @@ GROUP BY price_direction_indicator;
 ```
 
 Compare anomalous prices to non-anomalous prices to judge model efficacy
-```
+```sql
 SELECT
   usd,
   previous_price,
