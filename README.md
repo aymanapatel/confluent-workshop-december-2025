@@ -351,7 +351,14 @@ We'll also need the endpoint address. The easiest way to get it is from Confluen
 
 Start DuckDB
 ```duckdb --ui workshop_analytics.db```
-[todo add screenshot]
+
+<img width="1252" height="154" alt="Screenshot 2025-11-28 at 11 52 26" src="https://github.com/user-attachments/assets/b21e34bd-32a2-4eea-9ac8-1d152a339e16" />
+Click "Open in browser", or right click over the address (localhost:4213) and open in a new tab. 
+
+Once you land into DuckDB interface proceed to create an empty notebook. 
+<img width="1286" height="481" alt="Screenshot 2025-11-28 at 11 57 12" src="https://github.com/user-attachments/assets/166243e8-5a2d-4805-87d5-e1216e30f23d" />
+
+Run the following queries in DuckDB. Make sure to replace values with your API Key/Secret, your endpoint and your Kafka cluster ID
 
 ```sql
 CREATE SECRET iceberg_secret (
