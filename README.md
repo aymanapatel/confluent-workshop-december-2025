@@ -15,7 +15,7 @@ GitHub Account: Required for accessing GitHub Codespaces or cloning the workshop
 
 This is simplified flow. For more information and extra activities check detailed [guides](./guides). The flow below skips and simplifies some sections.
 
-## Step 1. Set up playground
+## 📍Step 1. Set up playground
 
 ### 1.1 Open the repository in GitHub Codespace
 
@@ -103,7 +103,7 @@ You can test Tableflow access by listing topics (should be empty initially)
 confluent tableflow topic list
 ```
 
-## Step 2. Bring the data in!
+## 📍Step 2. Bring the data in!
 We'll stream cryptocurrency data from [coingecko](https://www.coingecko.com/) into an Apache Kafka topic.
 
 ### 2.1 Create Kafka topic
@@ -133,7 +133,7 @@ Script [deploy-connector](scripts/kafka/deploy-connector.sh) deploys HttpSource 
 ( cd scripts/kafka && ./deploy-connector.sh )
 ```
 
-## Step 3. Process streaming data with Apache Flink
+## 📍Step 3. Process streaming data with Apache Flink
 
 Create a compute pool
 ```
@@ -302,7 +302,7 @@ WHERE ABS(usd_24h_change) > 3.0
 );
 ```
 
-## Setp 4. Configure access via Iceberg tables and connect DuckDB for analytics
+## 📍Step 4. Configure access via Iceberg tables and connect DuckDB for analytics
 
 ### 4.1 Enable tableflow for the tables
 
@@ -434,5 +434,6 @@ SELECT
 FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions";
 ```
 
-
-
+## 📍Step 5. Cleanup
+Follow [the teardown guide](guides/05-teardown-resources.adoc) to prevent unexpected charges from Flink compute pools and Tableflow catalog integrations.
+ 
