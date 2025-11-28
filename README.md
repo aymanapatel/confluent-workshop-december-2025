@@ -69,7 +69,7 @@ You can get additional details of the cluster by running
 confluent kafka cluster describe $CC_KAFKA_CLUSTER
 ```
 
-### 1.6 Create API keys 
+### 1.5 Create API keys 
 We'll need API keys for the cluster itself and for Tableflow.
 
 ```
@@ -103,7 +103,7 @@ You can test Tableflow access by listing topics (should be empty initially)
 confluent tableflow topic list
 ```
 
-## Setp 2. Bring the data in!
+## Step 2. Bring the data in!
 We'll stream cryptocurrency data from [coingecko](https://www.coingecko.com/) into an Apache Kafka topic.
 
 ### 2.1 Create Kafka topic
@@ -151,7 +151,7 @@ And set to use this compute pool
 confluent flink compute-pool use $FLINK_POOL_ID
 ```
 
-## 3.2
+## 3.2 Transform and flatten crypto records
 Enter the shell to run SQL queries:
 ```
 confluent flink shell --compute-pool $FLINK_POOL_ID
@@ -250,15 +250,65 @@ WHERE forecast[1][2] IS NOT NULL AND anomaly_results[6] IS NOT NULL;
 
 ```
 
+## 3.4 Create a trend analysis over 10-minute windows
 
+```
+CREATE TABLE `crypto-trends` AS
+SELECT 
+  coin_id as cryptocurrency,
+  window_start,
+  window_end,
+  avg_price,
+  price_volatility,
+  CASE 
+    WHEN price_change_pct > 2 THEN 'UPWARD'
+    WHEN price_change_pct < -2 THEN 'DOWNWARD'
+    ELSE 'SIDEWAYS'
+  END as trend_direction,
+  LEAST(ABS(price_change_pct) / 10.0, 1.0) as confidence_score
+FROM (
+  SELECT 
+    coin_id,
+    window_start,
+    window_end,
+    AVG(usd) as avg_price,
+    STDDEV(usd) as price_volatility,
+    (LAST_VALUE(usd) - FIRST_VALUE(usd)) / FIRST_VALUE(usd) * 100 as price_change_pct
+  FROM TABLE(
+    TUMBLE(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '10' MINUTES)
+  )
+  GROUP BY coin_id, window_start, window_end
+);
+```
 
+## 3.5  Create a derived table for price alert signals
+
+```
+CREATE TABLE `price-alerts` AS (
+SELECT 
+  coin_id AS cryptocurrency,
+  usd AS current_price,
+  usd_24h_change AS price_change,
+  CASE 
+    WHEN usd_24h_change > 5 THEN 'STRONG_BULLISH'
+    WHEN usd_24h_change > 5 THEN 'BULLISH'
+    WHEN usd_24h_change < -5 THEN 'STRONG_BEARISH'
+    WHEN usd_24h_change < -3 THEN 'BEARISH'
+    ELSE 'NEUTRAL'
+  END AS alert_type,
+  event_time AS alert_time
+FROM `crypto-prices-exploded`
+WHERE ABS(usd_24h_change) > 3.0
+);
+```
 
 ## Setp 4. Configure access via Iceberg tables and connect DuckDB for analytics
 
-### 4.1 Enable tableflow
+### 4.1 Enable tableflow for the tables
+
+
+For predictions:
 ```
-# Enable Tableflow for the crypto-predictions topic created by Flink. The use case
-# for exporting data for analytics is to analyze predictive accuracy of the models.
 confluent tableflow topic enable crypto-predictions \
   --cluster $CC_KAFKA_CLUSTER \
   --storage-type MANAGED \
@@ -266,31 +316,42 @@ confluent tableflow topic enable crypto-predictions \
   --retention-ms 604800000
 ```
 
-### 4.2
+For trends:
+```
+confluent tableflow topic enable crypto-trends \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+```
 
+For price alerts:
+```
+confluent tableflow topic enable price-alerts \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+```
+
+### 4.2 Start DuckDB and connect to Tableflow
+
+To send requests to Tableflow we'll need id of the Kafka cluster and Key/Secret to access Tableflow data. Output the values to the terminal to be able to copy them later in DuckDB interface:
 ```
 cat <<EOF
-SET CC_KAFKA_CLUSTER = $CC_KAFKA_CLUSTER
-SET TABLEFLOW_API_KEY = $TABLEFLOW_API_KEY
-SET TABLEFLOW_API_SECRET = $TABLEFLOW_API_SECRET
+CC_KAFKA_CLUSTER: $CC_KAFKA_CLUSTER
+TABLEFLOW_API_KEY: $TABLEFLOW_API_KEY
+TABLEFLOW_API_SECRET: $TABLEFLOW_API_SECRET
 EOF
 ```
 
+We'll also need the endpoint address. The easiest way to get it is from Confluent Cloud console.
+<img width="2603" height="1197" alt="tableflow-endpoint" src="https://github.com/user-attachments/assets/4b3e60ab-20b7-4f76-b257-83a3b15d6cd7" />
 
 
-todo - add image
-
-
-
-```
-SET CC_KAFKA_CLUSTER =
-SET TABLEFLOW_API_KEY =
-SET TABLEFLOW_API_SECRET =
-```
-
-
-duckdb --ui workshop_analytics.db
-Give me an empty notebook
+Start DuckDB
+```duckdb --ui workshop_analytics.db```
+[todo add screenshot]
 
 ```sql
 CREATE SECRET iceberg_secret (
@@ -310,13 +371,37 @@ ATTACH 'warehouse' AS iceberg_catalog (
 );
 ```
 
+Test that connection works by requesting the list of databases.
 
-```duckdb --ui workshop_analytics.db```
+```
+SHOW DATABASES;
+```
 
+### 4.3 Price alerts
+Query price alerts created by Flink
+```
+SELECT * FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."price-alerts"
+ORDER BY alert_time DESC
+LIMIT 10;
+```
 
-```SHOW DATABASES;```
+Analyze alert patterns
+```
+SELECT
+    cryptocurrency,
+    alert_type,
+    COUNT(*) as alert_count,
+    AVG(price_change) as avg_change,
+    MIN(alert_time) as first_alert,
+    MAX(alert_time) as latest_alert
+FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."price-alerts"
+WHERE alert_time >= NOW() - INTERVAL 2 HOURS
+GROUP BY cryptocurrency, alert_type
+ORDER BY alert_count DESC;
+```
 
-Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
+### 4.4  Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
+
 ```
 SELECT
   price_direction_indicator,
@@ -348,5 +433,6 @@ SELECT
   is_anomaly
 FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions";
 ```
+
 
 
