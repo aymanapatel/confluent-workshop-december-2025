@@ -80,3 +80,124 @@ SELECT
 FROM `sample_data_orders`
 ```
 
+
+
+
+
+```
+CREATE TABLE `orders-enriched` (
+  key        BYTES,
+  ordertime  BIGINT,
+  orderid    INT,
+  itemid     STRING,
+  orderunits DOUBLE,
+  city       STRING,
+  state      STRING,
+  zipcode    BIGINT,
+
+  event_time AS TO_TIMESTAMP_LTZ(ordertime, 3),
+  processed_at AS CURRENT_TIMESTAMP,
+
+  WATERMARK FOR event_time AS event_time - INTERVAL '30' SECONDS
+);
+```
+
+```
+INSERT INTO `orders-enriched`
+SELECT
+  key,
+  ordertime,
+  orderid,
+  itemid,
+  orderunits,
+  address.city,
+  address.state,
+  address.zipcode
+FROM `sample_data_orders`;
+```
+
+```
+SELECT
+  itemid              AS product_id,
+  window_start,
+  window_end,
+  AVG(orderunits)     AS avg_units,
+  MIN(orderunits)     AS min_units,
+  MAX(orderunits)     AS max_units,
+  SUM(orderunits)     AS total_units,
+  COUNT(*)            AS orders_count
+FROM TABLE(
+  TUMBLE(
+    TABLE `orders-enriched`,
+    DESCRIPTOR(event_time),
+    INTERVAL '5' MINUTES
+  )
+)
+GROUP BY
+  itemid,
+  window_start,
+  window_end;
+```
+
+```
+CREATE TABLE `order-trends` AS
+SELECT 
+  itemid AS product_id,
+  window_start,
+  window_end,
+  avg_units,
+  units_volatility,
+  CASE 
+    WHEN units_change_pct > 2 THEN 'UPWARD'
+    WHEN units_change_pct < -2 THEN 'DOWNWARD'
+    ELSE 'SIDEWAYS'
+  END AS trend_direction,
+  LEAST(ABS(units_change_pct) / 10.0, 1.0) AS confidence_score
+FROM (
+  SELECT 
+    itemid,
+    window_start,
+    window_end,
+    AVG(orderunits) AS avg_units,
+    STDDEV(orderunits) AS units_volatility,
+    (LAST_VALUE(orderunits) - FIRST_VALUE(orderunits)) / FIRST_VALUE(orderunits) * 100 AS units_change_pct
+  FROM TABLE(
+    TUMBLE(
+      TABLE `orders-enriched`,        
+      DESCRIPTOR(event_time),
+      INTERVAL '10' MINUTES
+    )
+  )
+  GROUP BY itemid, window_start, window_end
+);
+```
+
+```
+CREATE TABLE `order-alerts` AS
+SELECT 
+  itemid AS product_id,
+  orderunits AS current_units,
+  units_change_pct AS units_change,
+  CASE
+    WHEN units_change_pct > 10 THEN 'STRONG_UP'
+    WHEN units_change_pct > 3 THEN 'UP'
+    WHEN units_change_pct < -10 THEN 'STRONG_DOWN'
+    WHEN units_change_pct < -3 THEN 'DOWN'
+    ELSE 'NEUTRAL'
+  END AS alert_type,
+  event_time AS alert_time
+FROM (
+  SELECT
+    itemid,
+    orderunits,
+    event_time,
+    /* % change vs previous order of the same item */
+    ((orderunits - LAG(orderunits) OVER (
+        PARTITION BY itemid ORDER BY event_time
+    )) / LAG(orderunits) OVER (
+        PARTITION BY itemid ORDER BY event_time
+    )) * 100 AS units_change_pct
+  FROM `orders-enriched`
+)
+WHERE ABS(units_change_pct) > 3;
+```
