@@ -1,398 +1,260 @@
-# Hands-On with Confluent Cloud: Apache Kafka®, Apache Flink®, and Tableflow
+# Cryptocurrency Analytics Pipeline - Workshop Notes
 
-Confluent Cloud is a fully managed platform for Apache Kafka, designed to simplify real-time data streaming and processing. It integrates Kafka for data ingestion, Flink for stream processing, and Tableflow for converting streaming data into analytics-ready Apache Iceberg tables. DuckDB, a lightweight analytical database, supports querying these Iceberg tables, making it an ideal tool for the workshop’s analytics component. The workshop is designed for developers with basic programming knowledge, potentially new to Kafka, Flink, or Tableflow, and aims to provide hands-on experience within a condensed time frame.
+## Resources
 
-🚨 CRITICAL - COST PREVENTION: After completing this workshop, immediately follow the teardown guide to prevent unexpected charges from Flink compute pools and Tableflow catalog integrations.
+### Links
+- **GitHub Repository**: [cc-workshop-cryptocurrency-analytics-pipeline](https://github.com/anelook/cc-workshop-cryptocurrency-analytics-pipeline?tab=readme-ov-file)
+- **Excalidraw Diagram**: https://excalidraw.com/#room=32234063a6650f477253,yQz48QZKfkO1A_L_nFJyXQ
+- [Setup guide](./SETUP.md)
 
-### What you'll learn
-- Set up a Kafka cluster and manage topics in Confluent Cloud.
-- Write and run a Flink job to process streaming data.
-- Use Tableflow to materialize Kafka topics as Iceberg tables and query them with DuckDB.
+---
 
-### Prerequisites
-GitHub Account: Required for accessing GitHub Codespaces or cloning the workshop repository.
-[Create a free GitHub account](https://github.com/join) if you don’t have one.
+## Architecture Overview
 
-This is simplified flow. For more information and extra activities check detailed [guides](./guides). The flow below skips and simplifies some sections.
-
-## 📍Step 1. Set up playground
-
-### 1.1 Open the repository in GitHub Codespace
-
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](
-https://github.com/codespaces/new/anelook/cc-workshop-cryptocurrency-analytics-pipeline)
-
-Alternatively, select the `<> Code` button, go to `Codespaces` and click to `Create codespace on main`. 
-
-The environment will install all necessary dependencies and tools. This will take around 10 minutes.
-
-Once the environment is ready, validate that everything is set up by running
+### Data Pipeline Flow
 ```
-workshop-validate
+📊 CoinGecko API 
+    ↓ (HttpSource Connector)
+🔥 Kafka Topic: crypto-prices (raw nested data)
+    ↓ (Flink SQL transformation)
+📋 Flink Tables:
+    ├─ crypto-prices-exploded (normalized, with watermarks)
+    ├─ crypto-predictions (ML forecasts + anomaly detection)
+    ├─ crypto-trends (10-minute tumbling windows)
+    └─ price-alerts (filtered events)
+    ↓ (Tableflow materialization)
+🗄️ Iceberg Tables (Parquet files in S3)
+    ↓ (DuckDB queries)
+📈 Analytics & Insights
 ```
 
-### 1.2 Get free trial for Confluent Cloud 
-Register for Confluent Cloud and get free credits by going to [cnfl.io/workshop-cloud](cnfl.io/workshop-cloud).
-Once registered, go to Billing and Payment and set the code ``CONFLUENTDEV1``.
+### Key Components
+1. **Data Ingestion**: HttpSource connector pulls cryptocurrency data from CoinGecko API
+2. **Stream Processing**: Flink SQL transforms, enriches, and analyzes real-time data
+3. **Data Materialization**: Tableflow converts streaming data to Iceberg tables
+4. **Analytics**: DuckDB queries Iceberg tables for historical analysis
 
-### 1.3 Authenticate Confluent CLI
-Use your email and password to authenticate [Confluent CLI](https://docs.confluent.io/confluent-cli/current/install.html)
-```
-workshop-login
-```
+### Tracked Cryptocurrencies
+- Bitcoin
+- Ethereum
+- Binancecoin (BNB)
+- Cardano (ADA)
+- Solana (SOL)
 
-### 1.4 Create an Apache Kafka cluster
+---
 
-Create a new basic cluster:
-```
-confluent kafka cluster create workshop-cluster \
-  --cloud aws \
-  --region us-east-1 \
-  --type basic
-```
-The output will give you additional information, including the id of the cluster. We'll need this id for later. For convenience export it to ``CC_KAFKA_CLUSTER``:
-```
-export CC_KAFKA_CLUSTER=
-```
-Set the cluster as the active one:
-```
-confluent kafka cluster use $CC_KAFKA_CLUSTER
-```
+## Tools Deep Dive
 
-You can also check at any time the list of your enviroments with
-```
-confluent kafka cluster list
-```
+### Apache Kafka
+- **Purpose**: Distributed event streaming platform
+- **Use Case**: Ingests cryptocurrency price updates in real-time
+- **Topic Configuration**:
+  - Partitions: 3 (for parallel processing)
+  - Retention: 7 days (604800000 ms)
+  - Cleanup policy: Delete
 
-You can get additional details of the cluster by running
-```
-confluent kafka cluster describe $CC_KAFKA_CLUSTER
-```
+**Key Topics:**
+- `crypto-prices`: Raw nested JSON from CoinGecko
+- `crypto-prices-exploded`: Normalized data (one row per coin)
+- `crypto-predictions`: ML predictions and anomaly flags
+- `crypto-trends`: Windowed aggregations
+- `price-alerts`: Alert signals based on thresholds
 
-### 1.5 Create API keys 
-We'll need API keys for the cluster itself and for Tableflow.
+### Apache Flink
+- **Purpose**: Stream processing engine for real-time transformations
+- **Compute Resources**: Confluent Flink Units (CFUs)
+- **SQL Interface**: Allows SQL queries on streaming data
 
-```
-confluent api-key create --resource $CC_KAFKA_CLUSTER --description "Workshop API Key for Kafka Cluster"
-```
-The command outpust the key and the secret, keep them for later.
-```
-export KAFKA_API_KEY=
-```
-```
-export KAFKA_API_SECRET=
-```
-Set to use these keys for the cluster.
-```
-confluent api-key use $KAFKA_API_KEY --resource $CC_KAFKA_CLUSTER
-```
+#### Key Flink Concepts
 
-Now, let's do same steps for Tableflow
+**1. Event Time Processing**
+- Uses `last_updated_at` from API as event time
+- Converts to timestamp: `TO_TIMESTAMP_LTZ(last_updated_at, 0)`
+- Separate from processing time (`CURRENT_TIMESTAMP`)
 
-```
-confluent api-key create --resource tableflow --description "Workshop API Key for Tableflow"
-```
-```
-export TABLEFLOW_API_KEY=
-```
-```
-export TABLEFLOW_API_SECRET=
-```
-You can test Tableflow access by listing topics (should be empty initially)
-```
-confluent tableflow topic list
-```
+**2. Watermarks**
+- Handles late-arriving events
+- Configuration: `event_time - INTERVAL '30' SECONDS`
+- Allows events up to 30 seconds late before closing windows
 
-## 📍Step 2. Bring the data in!
-We'll stream cryptocurrency data from [coingecko](https://www.coingecko.com/) into an Apache Kafka topic.
+**3. Window Functions**
 
-### 2.1 Create Kafka topic
-
-Create topic for cryptocurrency prices
-```
-confluent kafka topic create crypto-prices \
-  --partitions 3 \
-  --config retention.ms=604800000 \
-  --config cleanup.policy=delete
-```
-
-You can list all topics
-```
-confluent kafka topic list
-```
-Get additional information and topic configuration
-```
-confluent kafka topic describe crypto-prices
-confluent kafka topic configuration list crypto-prices
-```
-
-### 2.2 Deploy connector
-
-Script [deploy-connector](scripts/kafka/deploy-connector.sh) deploys HttpSource connectors that brings the data from coingecko's API endpoint
-```
-( cd scripts/kafka && ./deploy-connector.sh )
-```
-
-## 📍Step 3. Process streaming data with Apache Flink
-
-Create a compute pool
-```
-confluent flink compute-pool create workshop-pool \
-  --cloud aws \
-  --region us-east-1 \
-  --max-cfu 5 
-```
-Export the id
-```
-export FLINK_POOL_ID=
-```
-And set to use this compute pool
-```
-confluent flink compute-pool use $FLINK_POOL_ID
-```
-
-## 3.2 Transform and flatten crypto records
-Enter the shell to run SQL queries:
-```
-confluent flink shell --compute-pool $FLINK_POOL_ID
-```
-
-Create exploded table with individual records for each cryptocurrency. This sets proper time attributes for windowing operations
-
+**Tumbling Windows** (non-overlapping):
+- Duration: 10 minutes
+- Use: Trend analysis with discrete time buckets
 ```sql
-CREATE TABLE `crypto-prices-exploded` (
-    coin_id STRING,
-    usd DOUBLE,
-    usd_market_cap DOUBLE,
-    usd_24h_vol DOUBLE,
-    usd_24h_change DOUBLE,
-    last_updated_at BIGINT,
-    event_time AS TO_TIMESTAMP_LTZ(last_updated_at, 0),
-    processed_at AS CURRENT_TIMESTAMP,
-    WATERMARK FOR event_time AS event_time - INTERVAL '30' SECONDS
+TUMBLE(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '10' MINUTES)
+```
+
+**Hopping Windows** (sliding/overlapping):
+- Slide: 1 minute
+- Size: 5 minutes
+- Use: Moving averages with overlap
+```sql
+HOP(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '1' MINUTES, INTERVAL '5' MINUTES)
+```
+
+**4. Window Aggregation Functions**
+- `AVG(usd)`: Average price in window
+- `STDDEV(usd)`: Price volatility/standard deviation
+- `FIRST_VALUE(usd)`: First price in window
+- `LAST_VALUE(usd)`: Last price in window
+- `MIN/MAX(usd)`: Price range boundaries
+
+**5. Analytical Functions**
+- `LAG(usd, 1) OVER (PARTITION BY coin_id ORDER BY event_time)`: Previous price per coin
+- Window specification for partitioned analytics
+
+### Confluent ML Functions (ARIMA-based)
+
+#### ML_FORECAST
+Predicts future values using time-series forecasting:
+```sql
+ML_FORECAST(usd, event_time, JSON_OBJECT('horizon' VALUE 1))
+    OVER (PARTITION BY coin_id
+          ORDER BY event_time
+          RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+```
+- **Returns**: Array `[timestamp, predicted_value]`
+- **Horizon**: Number of steps ahead to predict (1 = next value)
+- **Access**: `forecast[1][2]` gets the predicted USD value
+
+#### ML_DETECT_ANOMALIES
+Identifies abnormal price movements:
+```sql
+ML_DETECT_ANOMALIES(usd, event_time, JSON_OBJECT('horizon' VALUE 1))
+    OVER (PARTITION BY coin_id
+          ORDER BY event_time
+          RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+```
+- **Returns**: Array with anomaly indicators
+- **Access**: `anomaly_results[6]` extracts boolean anomaly flag
+
+### Tableflow
+- **Purpose**: Materializes Kafka topics as Iceberg tables
+- **Storage**: Managed storage in AWS S3
+- **Format**: Apache Iceberg (columnar, versioned)
+- **Retention**: 7 days for analytics tables
+
+**Configuration per Table:**
+```bash
+confluent tableflow topic enable <topic-name> \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+```
+
+### Apache Iceberg
+- **Purpose**: Open table format for analytics
+- **Benefits**:
+  - Schema evolution (add/modify columns)
+  - Time travel (query historical snapshots)
+  - ACID transactions
+  - Efficient column pruning and predicate pushdown
+  
+**Integration Points:**
+- Storage: AWS S3 (Parquet files)
+- Catalog: Confluent Tableflow catalog
+- Query engines: DuckDB, Snowflake, Spark, Trino
+
+### DuckDB
+- **Purpose**: Lightweight analytical database for querying Iceberg tables
+- **Features**:
+  - In-process SQL OLAP database
+  - Native Iceberg support via `iceberg` extension
+  - OAuth2 authentication to Tableflow catalog
+  - Web UI for interactive queries
+
+**Connection Setup:**
+```sql
+CREATE SECRET iceberg_secret (
+    TYPE ICEBERG,
+    CLIENT_ID '<tableflow-api-key>',
+    CLIENT_SECRET '<tableflow-api-secret>',
+    ENDPOINT '<tableflow-endpoint-url>',
+    OAUTH2_SCOPE 'catalog'
 );
 
+ATTACH 'warehouse' AS iceberg_catalog (
+    TYPE iceberg,
+    SECRET iceberg_secret,
+    ENDPOINT '<tableflow-endpoint-url>'
+);
 ```
 
-Populate the exploded table from the raw crypto-prices data
+---
+
+## SQL Query Patterns
+
+### 1. Data Transformation (Flink)
+
+#### Exploding Nested JSON
+Converts nested cryptocurrency data to normalized rows:
 ```sql
+CREATE TABLE `crypto-prices-exploded` (...);
+
 INSERT INTO `crypto-prices-exploded`
-SELECT 
-    coin_id,
-    usd,
-    usd_market_cap,
-    usd_24h_vol,
-    usd_24h_change,
-    last_updated_at
+SELECT coin_id, usd, usd_market_cap, usd_24h_vol, usd_24h_change, last_updated_at
 FROM (
-    SELECT 'bitcoin' as coin_id, bitcoin.usd, bitcoin.usd_market_cap, bitcoin.usd_24h_vol, bitcoin.usd_24h_change, bitcoin.last_updated_at FROM `crypto-prices` WHERE bitcoin IS NOT NULL
+    SELECT 'bitcoin' as coin_id, bitcoin.usd, ... FROM `crypto-prices` WHERE bitcoin IS NOT NULL
     UNION ALL
-    SELECT 'ethereum' as coin_id, ethereum.usd, ethereum.usd_market_cap, ethereum.usd_24h_vol, ethereum.usd_24h_change, ethereum.last_updated_at FROM `crypto-prices` WHERE ethereum IS NOT NULL
-    UNION ALL
-    SELECT 'binancecoin' as coin_id, binancecoin.usd, binancecoin.usd_market_cap, binancecoin.usd_24h_vol, binancecoin.usd_24h_change, binancecoin.last_updated_at FROM `crypto-prices` WHERE binancecoin IS NOT NULL
-    UNION ALL
-    SELECT 'cardano' as coin_id, cardano.usd, cardano.usd_market_cap, cardano.usd_24h_vol, cardano.usd_24h_change, cardano.last_updated_at FROM `crypto-prices` WHERE cardano IS NOT NULL
-    UNION ALL
-    SELECT 'solana' as coin_id, solana.usd, solana.usd_market_cap, solana.usd_24h_vol, solana.usd_24h_change, solana.last_updated_at FROM `crypto-prices` WHERE solana IS NOT NULL
-) exploded
-WHERE usd IS NOT NULL AND usd > 0;
+    SELECT 'ethereum' as coin_id, ethereum.usd, ... FROM `crypto-prices` WHERE ethereum IS NOT NULL
+    -- ... more coins
+) WHERE usd IS NOT NULL AND usd > 0;
 ```
 
-Check the latest 10 records
-```sql
-SELECT * FROM `crypto-prices-exploded` LIMIT 10;
-```
-
-You can also count records per cryptocurrency
-```sql
-SELECT 
-    coin_id,
-    COUNT(*) as record_count,
-    AVG(usd) as avg_price,
-    MIN(event_time) as earliest_update,
-    MAX(event_time) as latest_update
-FROM `crypto-prices-exploded`
-GROUP BY coin_id;
-```
-
-
-## 3.3 Create Derived Stream for Price Predictions
-```sql
-CREATE TABLE `crypto-predictions` AS
-SELECT
-  event_time,
-  coin_id,
-  usd,
-  forecast[1][2] AS predicted_usd,
-  previous_price,
-  (previous_price - usd) / usd AS pct_diff,
-  anomaly_results[6] AS is_anomaly
-FROM (
-  SELECT
-    coin_id,
-    usd,
-    event_time,
-    LAG(usd, 1)
-        OVER (PARTITION BY coin_id
-            ORDER BY event_time) AS previous_price,
-    ML_FORECAST(usd, event_time, JSON_OBJECT('horizon' VALUE 1))
-      OVER (PARTITION BY coin_id
-            ORDER BY event_time
-            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS forecast,
-    ML_DETECT_ANOMALIES(usd, event_time, JSON_OBJECT('horizon' VALUE 1))
-      OVER (PARTITION BY coin_id
-            ORDER BY event_time
-            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS anomaly_results
-  FROM `crypto-prices-exploded`
-)
-WHERE forecast[1][2] IS NOT NULL AND anomaly_results[6] IS NOT NULL;
-
-
-```
-
-## 3.4 Create a trend analysis over 10-minute windows
-
+#### Creating Derived Tables with Window Aggregations
 ```sql
 CREATE TABLE `crypto-trends` AS
 SELECT 
   coin_id as cryptocurrency,
   window_start,
   window_end,
-  avg_price,
-  price_volatility,
+  AVG(usd) as avg_price,
+  STDDEV(usd) as price_volatility,
+  (LAST_VALUE(usd) - FIRST_VALUE(usd)) / FIRST_VALUE(usd) * 100 as price_change_pct,
   CASE 
     WHEN price_change_pct > 2 THEN 'UPWARD'
     WHEN price_change_pct < -2 THEN 'DOWNWARD'
     ELSE 'SIDEWAYS'
-  END as trend_direction,
-  LEAST(ABS(price_change_pct) / 10.0, 1.0) as confidence_score
-FROM (
-  SELECT 
-    coin_id,
-    window_start,
-    window_end,
-    AVG(usd) as avg_price,
-    STDDEV(usd) as price_volatility,
-    (LAST_VALUE(usd) - FIRST_VALUE(usd)) / FIRST_VALUE(usd) * 100 as price_change_pct
-  FROM TABLE(
-    TUMBLE(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '10' MINUTES)
-  )
-  GROUP BY coin_id, window_start, window_end
-);
+  END as trend_direction
+FROM TABLE(
+  TUMBLE(TABLE `crypto-prices-exploded`, DESCRIPTOR(event_time), INTERVAL '10' MINUTES)
+)
+GROUP BY coin_id, window_start, window_end;
 ```
 
-## 3.5  Create a derived table for price alert signals
-
+#### Alert Logic with Filtering
 ```sql
-CREATE TABLE `price-alerts` AS (
+CREATE TABLE `price-alerts` AS
 SELECT 
   coin_id AS cryptocurrency,
   usd AS current_price,
   usd_24h_change AS price_change,
   CASE 
     WHEN usd_24h_change > 5 THEN 'STRONG_BULLISH'
-    WHEN usd_24h_change > 5 THEN 'BULLISH'
+    WHEN usd_24h_change > 3 THEN 'BULLISH'
     WHEN usd_24h_change < -5 THEN 'STRONG_BEARISH'
     WHEN usd_24h_change < -3 THEN 'BEARISH'
     ELSE 'NEUTRAL'
   END AS alert_type,
   event_time AS alert_time
 FROM `crypto-prices-exploded`
-WHERE ABS(usd_24h_change) > 3.0
-);
+WHERE ABS(usd_24h_change) > 3.0;
 ```
 
-## 📍Step 4. Configure access via Iceberg tables and connect DuckDB for analytics
+### 2. Analytics Queries (DuckDB)
 
-### 4.1 Enable tableflow for the tables
-
-
-For predictions:
-```
-confluent tableflow topic enable crypto-predictions \
-  --cluster $CC_KAFKA_CLUSTER \
-  --storage-type MANAGED \
-  --table-formats ICEBERG \
-  --retention-ms 604800000
-```
-
-For trends:
-```
-confluent tableflow topic enable crypto-trends \
-  --cluster $CC_KAFKA_CLUSTER \
-  --storage-type MANAGED \
-  --table-formats ICEBERG \
-  --retention-ms 604800000
-```
-
-For price alerts:
-```
-confluent tableflow topic enable price-alerts \
-  --cluster $CC_KAFKA_CLUSTER \
-  --storage-type MANAGED \
-  --table-formats ICEBERG \
-  --retention-ms 604800000
-```
-
-### 4.2 Start DuckDB and connect to Tableflow
-
-To send requests to Tableflow we'll need id of the Kafka cluster and Key/Secret to access Tableflow data. Output the values to the terminal to be able to copy them later in DuckDB interface:
-```
-cat <<EOF
-CC_KAFKA_CLUSTER: $CC_KAFKA_CLUSTER
-TABLEFLOW_API_KEY: $TABLEFLOW_API_KEY
-TABLEFLOW_API_SECRET: $TABLEFLOW_API_SECRET
-EOF
-```
-
-We'll also need the endpoint address. The easiest way to get it is from Confluent Cloud console.
-<img width="2603" height="1197" alt="tableflow-endpoint" src="https://github.com/user-attachments/assets/4b3e60ab-20b7-4f76-b257-83a3b15d6cd7" />
-
-
-Start DuckDB
-```duckdb --ui workshop_analytics.db```
-
-<img width="1252" height="154" alt="Screenshot 2025-11-28 at 11 52 26" src="https://github.com/user-attachments/assets/b21e34bd-32a2-4eea-9ac8-1d152a339e16" />
-Click "Open in browser", or right click over the address (localhost:4213) and open in a new tab. 
-
-Once you land into DuckDB interface proceed to create an empty notebook. 
-<img width="1286" height="481" alt="Screenshot 2025-11-28 at 11 57 12" src="https://github.com/user-attachments/assets/166243e8-5a2d-4805-87d5-e1216e30f23d" />
-
-Run the following queries in DuckDB. Make sure to replace values with your API Key/Secret, your endpoint and your Kafka cluster ID
-
+#### Query Materialized Tables
 ```sql
-CREATE SECRET iceberg_secret (
-    TYPE ICEBERG,
-    CLIENT_ID 'your-tableflow-api-key',
-    CLIENT_SECRET 'your-tableflow-api-secret',
-    ENDPOINT 'https://tableflow.us-east-1.aws.confluent.cloud/iceberg/catalog/organizations/your-org-id/environments/your-env-id',
-    OAUTH2_SCOPE 'catalog'
-);
-```
-
-```sql
-ATTACH 'warehouse' AS iceberg_catalog (
-    TYPE iceberg,
-    SECRET iceberg_secret,
-    ENDPOINT 'https://tableflow.us-east-1.aws.confluent.cloud/iceberg/catalog/organizations/your-org-id/environments/your-env-id'
-);
-```
-
-Test that connection works by requesting the list of databases.
-
-```sql
-SHOW DATABASES;
-```
-
-### 4.3 Price alerts
-Query price alerts created by Flink
-```sql
+-- Latest price alerts
 SELECT * FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."price-alerts"
 ORDER BY alert_time DESC
 LIMIT 10;
 ```
 
-Analyze alert patterns
+#### Alert Pattern Analysis
 ```sql
 SELECT
     cryptocurrency,
@@ -407,8 +269,8 @@ GROUP BY cryptocurrency, alert_type
 ORDER BY alert_count DESC;
 ```
 
-### 4.4  Analyze price forecast model efficacy for overall directional (increase / decrease) accuracy
-
+#### Forecast Accuracy Analysis
+Evaluates directional accuracy (did prediction match actual direction?):
 ```sql
 SELECT
   price_direction_indicator,
@@ -416,9 +278,9 @@ SELECT
 FROM (
   SELECT
     usd - lag(usd) OVER w AS actual_change,
-    usd - lag(predicted_usd) OVER w AS predicted_change,
+    predicted_usd - lag(predicted_usd) OVER w AS predicted_change,
     CASE
-      WHEN SIGN(actual_change) == SIGN (predicted_change) THEN '⭐'
+      WHEN SIGN(actual_change) = SIGN(predicted_change) THEN '⭐'
       ELSE '❌'
     END AS price_direction_indicator
   FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions"
@@ -431,16 +293,89 @@ FROM (
 GROUP BY price_direction_indicator;
 ```
 
-Compare anomalous prices to non-anomalous prices to judge model efficacy
-```sql
-SELECT
-  usd,
-  previous_price,
-  pct_diff,
-  is_anomaly
-FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."crypto-predictions";
-```
+---
 
-## 📍Step 5. Cleanup
-Follow [the teardown guide](guides/05-teardown-resources.adoc) to prevent unexpected charges from Flink compute pools and Tableflow catalog integrations.
- 
+## Statistics & ML Models
+
+### ARIMA (AutoRegressive Integrated Moving Average)
+Statistical model for time-series forecasting used by Confluent ML functions:
+
+#### Components
+- **AutoRegressive (AR)**: 
+  - Uses past values (lags) to predict future
+  - Example: Today's price influenced by yesterday's price
+  - Mathematical form: $y_t = c + φ₁y_{t-1} + φ₂y_{t-2} + ... + ε_t$
+
+- **Integrated (I)**: 
+  - Removes trends to achieve stationarity
+  - Differencing: $y'_t = y_t - y_{t-1}$
+  - Makes variance constant over time
+
+- **Moving Average (MA)**: 
+  - Uses past forecast errors to improve predictions
+  - Smooths out noise in the data
+  - Mathematical form: `y_t = μ + ε_t + θ₁ε_{t-1} + θ₂ε_{t-2} + ...`
+
+#### Application in Workshop
+- **Prediction Horizon**: 1 step ahead (next data point)
+- **Partitioning**: Separate model per cryptocurrency
+- **Window**: Unbounded preceding (all historical data)
+- **Output**: Predicted USD price and anomaly flag
+
+### Anomaly Detection
+Uses statistical methods to identify outliers:
+- **Method**: Time-series based anomaly detection
+- **Baseline**: Historical patterns per cryptocurrency
+- **Threshold**: Statistical deviation from expected values
+- **Use Case**: Flag unusual price movements (crashes, spikes)
+
+### Statistical Aggregations
+
+#### Volatility Measurement
+```sql
+STDDEV(usd) as price_volatility
+```
+- Standard deviation of prices in window
+- Higher value = more volatile/risky
+
+#### Price Range Percentage
+```sql
+(MAX(usd) - MIN(usd)) / AVG(usd) * 100 as price_range_pct
+```
+- Shows percentage swing within window
+- Normalized by average price
+
+#### Confidence Scoring
+```sql
+LEAST(ABS(price_change_pct) / 10.0, 1.0) as confidence_score
+```
+- Scales trend strength to [0, 1]
+- Larger price changes = higher confidence
+- Caps at 1.0 (100%)
+
+---
+
+## Key Takeaways
+
+### Architecture Benefits
+1. **Real-time Processing**: Flink processes events as they arrive
+2. **Scalability**: Kafka partitioning + Flink parallelism
+3. **Flexibility**: SQL interface for stream processing
+4. **Analytics-Ready**: Iceberg tables for historical analysis
+5. **Cost-Effective**: 7-day retention prevents unbounded storage
+
+### Data Flow Highlights
+- **Source**: CoinGecko API (external REST endpoint)
+- **Ingestion**: HttpSource connector → Kafka topic
+- **Processing**: Flink SQL (explode, enrich, aggregate, predict)
+- **Storage**: Tableflow → Iceberg → S3 (Parquet)
+- **Query**: DuckDB → OLAP analytics on historical data
+
+### Best Practices Demonstrated
+- Event time processing with watermarks
+- Partitioned window operations
+- Derived tables for specific use cases
+- Separation of streaming (Flink) and batch (DuckDB) analytics
+- Managed storage with retention policies
+
+
