@@ -201,3 +201,35 @@ FROM (
 )
 WHERE ABS(units_change_pct) > 3;
 ```
+
+duckdb
+
+```
+confluent tableflow topic enable order-alerts \
+  --cluster $CC_KAFKA_CLUSTER \
+  --storage-type MANAGED \
+  --table-formats ICEBERG \
+  --retention-ms 604800000
+```  
+```sql
+SELECT *
+FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."order-alerts"
+ORDER BY alert_time DESC
+LIMIT 10;
+```
+
+```sql
+SELECT
+    product_id,
+    alert_type,
+    COUNT(*) AS alert_count,
+    AVG(units_change) AS avg_change,
+    MIN(alert_time) AS first_alert,
+    MAX(alert_time) AS latest_alert
+FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."order-alerts"
+WHERE alert_time >= NOW() - INTERVAL 2 HOURS
+GROUP BY product_id, alert_type
+ORDER BY alert_count DESC;
+```
+
+
