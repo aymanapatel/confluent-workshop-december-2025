@@ -84,7 +84,7 @@ FROM `sample_data_orders`
 
 
 
-```
+```sql
 CREATE TABLE `orders-enriched` (
   key        BYTES,
   ordertime  BIGINT,
@@ -102,7 +102,7 @@ CREATE TABLE `orders-enriched` (
 );
 ```
 
-```
+```sql
 INSERT INTO `orders-enriched`
 SELECT
   key,
@@ -116,7 +116,7 @@ SELECT
 FROM `sample_data_orders`;
 ```
 
-```
+```sql
 SELECT
   itemid              AS product_id,
   window_start,
@@ -139,7 +139,7 @@ GROUP BY
   window_end;
 ```
 
-```
+```sql
 CREATE TABLE `order-trends` AS
 SELECT 
   itemid AS product_id,
@@ -172,7 +172,8 @@ FROM (
 );
 ```
 
-```
+
+```sql
 CREATE TABLE `order-alerts` AS
 SELECT 
   itemid AS product_id,
@@ -203,6 +204,9 @@ WHERE ABS(units_change_pct) > 3;
 ```
 
 duckdb
+```
+duckdb --ui workshop_analytics.db
+```
 
 ```
 confluent tableflow topic enable order-alerts \
