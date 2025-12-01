@@ -1,9 +1,9 @@
-# Variation of the workshop in case coingecko has issues
+# Variation of the workshop in case coingecko API has issues
 
 Confluent Cloud offers a possibility to set up the Datagen Kafka Connector to produce sample events
 <img width="2357" height="1079" alt="sample-data" src="https://github.com/user-attachments/assets/880a3d3c-601f-4081-8ced-9cb2a9d5236c" />
 
-Proceed with sample_data_orders. The topic will be populated with events such as
+Select to generate sample order data. The topic will be populated with events such as
 
 ```json
 {
@@ -19,70 +19,21 @@ Proceed with sample_data_orders. The topic will be populated with events such as
 }
 ```
 
+In Flink console you can check latest 10 items
+
 ```sql
 SELECT * FROM  `sample_data_orders` LIMIT 10;
 ```
 
+Get the schema of the `sample_data_orders` table 
 ```sql
 DESCRIBE `sample_data_orders`
 ```
 
 
 ## Enriched / flattened view with event time
-```sql
 
-CREATE TABLE `orders_enriched_table` (
-  ordertime BIGINT NOT NULL,
-  orderid INT NOT NULL,
-  itemid STRING NOT NULL,
-  orderunits DOUBLE NOT NULL,
-  city STRING,
-  state STRING,
-  zipcode BIGINT,
-  event_time AS TO_TIMESTAMP_LTZ(ordertime, 3),
-  WATERMARK FOR event_time AS event_time - INTERVAL '30' SECONDS
-);
-
-```
-```sql
-INSERT INTO `orders_enriched_table`
-SELECT
-  ordertime,
-  orderid,
-  itemid,
-  orderunits,
-  address.city    AS city,
-  address.state   AS state,
-  address.zipcode AS zipcode
-FROM `sample_data_orders`;
-```
-
-```sql
-SELECT * FROM `orders_enriched_table` LIMIT 10;
-```
-
-```sql
-CREATE TABLE `order_alerts` AS
-SELECT
-  orderid,
-  itemid,
-  orderunits,
-  address.state   AS state,
-  address.city    AS city,
-  address.zipcode AS zipcode,
-  TO_TIMESTAMP_LTZ(ordertime, 3) AS alert_time,
-  CASE
-    WHEN orderunits >= 20 THEN 'HUGE_ORDER'
-    WHEN orderunits >= 10 THEN 'LARGE_ORDER'
-    WHEN orderunits >= 5  THEN 'MEDIUM_ORDER'
-    ELSE 'NORMAL'
-  END AS alert_type
-FROM `sample_data_orders`
-```
-
-
-
-
+Create a derived table that has a couple of additional properties.
 
 ```sql
 CREATE TABLE `orders-enriched` (
@@ -94,14 +45,14 @@ CREATE TABLE `orders-enriched` (
   city       STRING,
   state      STRING,
   zipcode    BIGINT,
-
   event_time AS TO_TIMESTAMP_LTZ(ordertime, 3),
   processed_at AS CURRENT_TIMESTAMP,
-
   WATERMARK FOR event_time AS event_time - INTERVAL '30' SECONDS
 );
 ```
 
+
+Insert data into the new table
 ```sql
 INSERT INTO `orders-enriched`
 SELECT
@@ -115,6 +66,10 @@ SELECT
   address.zipcode
 FROM `sample_data_orders`;
 ```
+
+## Moving averages / windowed stats over orders
+
+5-minute tumbling windows, grouped by itemid:
 
 ```sql
 SELECT
@@ -139,6 +94,20 @@ GROUP BY
   window_end;
 ```
 
+## Order trends
+
+10-minute tumbling windows on event_time.
+Per item (itemid), per window:
+- avg_units – average orderunits in the window
+- units_volatility – STDDEV(orderunits) in the window
+- units_change_pct – percentage change from first to last orderunits in that window
+
+Trend label:
+> 2% → UPWARD
+< -2% → DOWNWARD
+otherwise → SIDEWAYS
+
+confidence_score: scaled 0–1 based on ABS(units_change_pct) 
 ```sql
 CREATE TABLE `order-trends` AS
 SELECT 
@@ -172,7 +141,9 @@ FROM (
 );
 ```
 
+## Alerts
 
+Alerts on the number of ordered units:
 ```sql
 CREATE TABLE `order-alerts` AS
 SELECT 
@@ -203,24 +174,32 @@ FROM (
 WHERE ABS(units_change_pct) > 3;
 ```
 
-duckdb
-```
-duckdb --ui workshop_analytics.db
-```
-
+## Materialize data via Tableflow
 ```
 confluent tableflow topic enable order-alerts \
   --cluster $CC_KAFKA_CLUSTER \
   --storage-type MANAGED \
   --table-formats ICEBERG \
   --retention-ms 604800000
-```  
+```
+
+Start DuckDB UI
+```
+duckdb --ui workshop_analytics.db
+```
+
+Get latest 10 items from the table
 ```sql
 SELECT *
 FROM iceberg_catalog."$CC_KAFKA_CLUSTER"."order-alerts"
 ORDER BY alert_time DESC
 LIMIT 10;
 ```
+
+Analyze order alert patterns:
+- how many alerts fired,
+- the average % units change,
+- when the first and latest alert happened in the last 2 hours.
 
 ```sql
 SELECT
