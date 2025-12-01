@@ -19,19 +19,64 @@ Proceed with sample_data_orders. The topic will be populated with events such as
 }
 ```
 
+```sql
+SELECT * FROM  `sample_data_orders` LIMIT 10;
+```
 
+```sql
+DESCRIBE `sample_data_orders`
+```
+
+
+## Enriched / flattened view with event time
+```sql
+
+CREATE TABLE `orders_enriched_table` (
+  ordertime BIGINT NOT NULL,
+  orderid INT NOT NULL,
+  itemid STRING NOT NULL,
+  orderunits DOUBLE NOT NULL,
+  city STRING,
+  state STRING,
+  zipcode BIGINT,
+  event_time AS TO_TIMESTAMP_LTZ(ordertime, 3),
+  WATERMARK FOR event_time AS event_time - INTERVAL '30' SECONDS
+);
 
 ```
-CREATE TABLE `orders-flat` AS
+```sql
+INSERT INTO `orders_enriched_table`
+SELECT
+  ordertime,
+  orderid,
+  itemid,
+  orderunits,
+  address.city    AS city,
+  address.state   AS state,
+  address.zipcode AS zipcode
+FROM `sample_data_orders`;
+```
+
+```sql
+SELECT * FROM `orders_enriched_table` LIMIT 10;
+```
+
+```sql
+CREATE TABLE `order_alerts` AS
 SELECT
   orderid,
   itemid,
   orderunits,
-  address.city   AS city,
-  address.state  AS state,
+  address.state   AS state,
+  address.city    AS city,
   address.zipcode AS zipcode,
-  event_time
-FROM 
-sample_data_orders
+  TO_TIMESTAMP_LTZ(ordertime, 3) AS alert_time,
+  CASE
+    WHEN orderunits >= 20 THEN 'HUGE_ORDER'
+    WHEN orderunits >= 10 THEN 'LARGE_ORDER'
+    WHEN orderunits >= 5  THEN 'MEDIUM_ORDER'
+    ELSE 'NORMAL'
+  END AS alert_type
+FROM `sample_data_orders`
 ```
 
